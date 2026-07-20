@@ -251,6 +251,21 @@
       color: #999;
     }
 
+    .loading-state .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid #e0ddd8;
+      border-top-color: #528790;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .posts-content {
       display: none;
     }
@@ -433,7 +448,7 @@
       <!-- Setup Screen -->
       <div id="setupScreen" class="setup-screen">
         <h2>API-Key eingeben</h2>
-        <p>Dein Anthropic API Key wird nur lokal gespeichert und nie an Server hochgeladen.</p>
+        <p>Dein Anthropic API Key wird nur lokal im Browser gespeichert und nie an Server hochgeladen.</p>
         <div class="key-input-group">
           <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
           <button id="saveKeyBtn">Speichern</button>
@@ -462,10 +477,11 @@
           <small>Kopiere eine Headline aus deinem 8-Wochen-Plan</small>
         </div>
 
-        <button id="generateBtn" class="generate-btn">Generiere 3-5 Varianten</button>
+        <button id="generateBtn" class="generate-btn">Generiere 3 Varianten</button>
 
         <div id="postsContainer" class="posts-container">
           <div id="loadingState" class="loading-state">
+            <div class="spinner"></div>
             <p>Generiere deine Posts...</p>
           </div>
           <div id="errorState" class="error-state"></div>
@@ -482,6 +498,17 @@
 
   <script>
     const STORAGE_KEY = 'everfound_api_key';
+    const API_URL = 'https://api.anthropic.com/v1/messages';
+
+    // ── Shared headers (the fix: anthropic-version + dangerous-direct-browser-access) ──
+    function apiHeaders(apiKey) {
+      return {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      };
+    }
 
     function initApp() {
       const savedKey = localStorage.getItem(STORAGE_KEY);
@@ -525,17 +552,14 @@
       testOutput.style.display = 'block';
 
       try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await fetch(API_URL, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey
-          },
+          headers: apiHeaders(apiKey),
           body: JSON.stringify({
             model: 'claude-sonnet-4-6',
-            max_tokens: 100,
+            max_tokens: 50,
             messages: [
-              { role: 'user', content: 'Antworte kurz mit: OK' }
+              { role: 'user', content: 'Antworte nur mit dem Wort: OK' }
             ]
           })
         });
@@ -545,11 +569,11 @@
           testOutput.className = 'test-output success';
         } else {
           const error = await response.json();
-          testOutput.textContent = `✗ API-Fehler: ${error.error.message}`;
+          testOutput.textContent = '✗ API-Fehler: ' + (error.error?.message || JSON.stringify(error));
           testOutput.className = 'test-output error';
         }
       } catch (err) {
-        testOutput.textContent = `✗ Verbindungsfehler: ${err.message}`;
+        testOutput.textContent = '✗ Verbindungsfehler: ' + err.message;
         testOutput.className = 'test-output error';
       }
     });
@@ -587,13 +611,13 @@
       document.getElementById('generateBtn').disabled = true;
 
       const systemPrompt = `Du bist Nina Wanek, Gründerin von Everfound (GEO/AI Visibility Agentur für KMUs im DACH-Raum). 
-Du postest auf LinkedIn mit einer klaren, substanzvollen Tonalität:
+Du postest auf LinkedIn mit einer klaren, substanzvollen Tonalität.
 
 TONALITÄT:
 - Österreichisch direkt, keine Corporate-Sprache
 - Wissenschaftlich fundiert, aber verständlich
 - Storytelling vor Fakten (Kundencases, konkrete Beispiele)
-- Ehrlich und transparent, keine Hype
+- Ehrlich und transparent, kein Hype
 - Lange Absätze, klare Struktur
 - Max 1 Emoji, nur wenn wirklich passend
 
@@ -608,35 +632,36 @@ STRUKTUR:
 WICHTIG:
 - NICHT die langweilige KI-Version
 - Substanz statt Slogans
-- Konkrete Beispiele
-- Österreichisches Deutsch`;
+- Konkrete Beispiele und Zahlen
+- Österreichisches Deutsch
+- Keine em-dashes (— oder –) im Fließtext
+- Keine übertriebenen Doppelpunkte in Fließtext-Sätzen`;
 
       const userPrompt = `Content Plan Headline: "${headline}"
 
-Generiere 3 unterschiedliche LinkedIn Post-Varianten zu dieser Headline.
+Generiere genau 3 unterschiedliche LinkedIn Post-Varianten zu dieser Headline.
+Jede Variante soll einen anderen Einstieg und Blickwinkel haben.
 
-Format:
+Antworte exakt in diesem Format (die --- Trennlinien sind wichtig):
+
 ---
 VARIANTE 1
-[Post-Text]
+[Post-Text hier]
 ---
 VARIANTE 2
-[Post-Text]
+[Post-Text hier]
 ---
 VARIANTE 3
-[Post-Text]
+[Post-Text hier]
 ---`;
 
       try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await fetch(API_URL, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey
-          },
+          headers: apiHeaders(apiKey),
           body: JSON.stringify({
             model: 'claude-sonnet-4-6',
-            max_tokens: 3000,
+            max_tokens: 4000,
             system: systemPrompt,
             messages: [{ role: 'user', content: userPrompt }]
           })
@@ -644,7 +669,7 @@ VARIANTE 3
 
         if (!response.ok) {
           const error = await response.json();
-          showError(`API-Fehler: ${error.error.message}`);
+          showError('API-Fehler: ' + (error.error?.message || JSON.stringify(error)));
           document.getElementById('generateBtn').disabled = false;
           return;
         }
@@ -657,46 +682,48 @@ VARIANTE 3
         container.innerHTML = '';
 
         varianten.forEach((variante, idx) => {
-          const postText = variante.replace(/^VARIANTE \d+\n?/, '').trim();
-          
+          const postText = variante.replace(/^VARIANTE \d+\s*\n?/, '').trim();
+          if (!postText) return;
+
           const card = document.createElement('div');
           card.className = 'post-card';
-          
-          card.innerHTML = `
-            <div class="post-header">
-              <h3>Variante ${idx + 1}</h3>
-              <button class="copyBtn" data-text="${postText.replace(/"/g, '&quot;')}">
-                <i class="fas fa-copy"></i> Kopieren
-              </button>
-            </div>
-            <div class="post-text">${postText}</div>
-            <div class="post-actions">
-              <button class="saveBtn" data-text="${postText.replace(/"/g, '&quot;')}">
-                <i class="fas fa-bookmark"></i> Speichern
-              </button>
-            </div>
-          `;
-          
-          container.appendChild(card);
-        });
 
-        // Copy buttons
-        document.querySelectorAll('.copyBtn').forEach(btn => {
-          btn.addEventListener('click', function() {
-            const text = this.dataset.text;
-            navigator.clipboard.writeText(text).then(() => {
-              showCopyFeedback();
-            });
+          const headerDiv = document.createElement('div');
+          headerDiv.className = 'post-header';
+
+          const title = document.createElement('h3');
+          title.textContent = 'Variante ' + (idx + 1);
+
+          const copyBtn = document.createElement('button');
+          copyBtn.innerHTML = '<i class="fas fa-copy"></i> Kopieren';
+          copyBtn.addEventListener('click', function() {
+            navigator.clipboard.writeText(postText).then(showCopyFeedback);
           });
-        });
 
-        // Save buttons
-        document.querySelectorAll('.saveBtn').forEach(btn => {
-          btn.addEventListener('click', function() {
-            const text = this.dataset.text;
+          headerDiv.appendChild(title);
+          headerDiv.appendChild(copyBtn);
+
+          const textDiv = document.createElement('div');
+          textDiv.className = 'post-text';
+          textDiv.textContent = postText;
+
+          const actionsDiv = document.createElement('div');
+          actionsDiv.className = 'post-actions';
+
+          const saveBtn = document.createElement('button');
+          saveBtn.innerHTML = '<i class="fas fa-bookmark"></i> Speichern';
+          saveBtn.addEventListener('click', function() {
             const time = new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
-            addToSavedList(text, time);
+            addToSavedList(postText, time);
+            saveBtn.innerHTML = '<i class="fas fa-check"></i> Gespeichert';
+            saveBtn.disabled = true;
           });
+          actionsDiv.appendChild(saveBtn);
+
+          card.appendChild(headerDiv);
+          card.appendChild(textDiv);
+          card.appendChild(actionsDiv);
+          container.appendChild(card);
         });
 
         document.getElementById('loadingState').style.display = 'none';
@@ -704,7 +731,7 @@ VARIANTE 3
         document.getElementById('generateBtn').disabled = false;
 
       } catch (err) {
-        showError(`Fehler: ${err.message}`);
+        showError('Fehler: ' + err.message);
         document.getElementById('generateBtn').disabled = false;
       }
     }
@@ -723,7 +750,7 @@ VARIANTE 3
       feedback.className = 'copy-feedback';
       feedback.textContent = '✓ Kopiert!';
       document.body.appendChild(feedback);
-      setTimeout(() => feedback.remove(), 2000);
+      setTimeout(function() { feedback.remove(); }, 2000);
     }
 
     function addToSavedList(text, time) {
@@ -734,20 +761,31 @@ VARIANTE 3
 
       const item = document.createElement('div');
       item.className = 'saved-item';
-      item.innerHTML = `
-        <div class="saved-item-text">
-          <div class="saved-item-time">${time}</div>
-          <div class="saved-item-content">${text.substring(0, 120)}...</div>
-        </div>
-        <button class="removeBtn"><i class="fas fa-trash"></i></button>
-      `;
 
-      savedPosts.appendChild(item);
+      const textDiv = document.createElement('div');
+      textDiv.className = 'saved-item-text';
 
-      item.querySelector('.removeBtn').addEventListener('click', function() {
+      const timeDiv = document.createElement('div');
+      timeDiv.className = 'saved-item-time';
+      timeDiv.textContent = time;
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'saved-item-content';
+      contentDiv.textContent = text.substring(0, 120) + '...';
+
+      textDiv.appendChild(timeDiv);
+      textDiv.appendChild(contentDiv);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.innerHTML = '<i class="fas fa-trash"></i>';
+      removeBtn.addEventListener('click', function() {
         item.remove();
         if (savedPosts.children.length === 0) savedList.style.display = 'none';
       });
+
+      item.appendChild(textDiv);
+      item.appendChild(removeBtn);
+      savedPosts.appendChild(item);
     }
 
     initApp();
